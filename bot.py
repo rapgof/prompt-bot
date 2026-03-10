@@ -56,14 +56,19 @@ async def handle_prompt_text(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def handle_prompt_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
-    photo = message.photo[-1] if message.photo else None
-    if not photo:
+
+    # Support both compressed photos and files/documents
+    if message.document and message.document.mime_type and message.document.mime_type.startswith("image/"):
+        file_obj = message.document
+    elif message.photo:
+        file_obj = message.photo[-1]
+    else:
         return ConversationHandler.END
 
     await message.reply_text("🔍 Извлекаю текст из скриншота...")
 
     try:
-        file = await context.bot.get_file(photo.file_id)
+        file = await context.bot.get_file(file_obj.file_id)
         file_bytes = await file.download_as_bytearray()
         extracted_text = await extract_text_from_image(bytes(file_bytes))
 
@@ -266,12 +271,12 @@ def main():
     conv_handler = ConversationHandler(
         entry_points=[
             MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.FORWARDED, handle_prompt_text),
-            MessageHandler(filters.PHOTO & ~filters.FORWARDED, handle_prompt_image),
+            MessageHandler((filters.PHOTO | filters.Document.IMAGE) & ~filters.FORWARDED, handle_prompt_image),
             MessageHandler(filters.FORWARDED, handle_forwarded),
         ],
         states={
             WAITING_MEDIA: [
-                MessageHandler(filters.PHOTO | filters.VIDEO, handle_media_input),
+                MessageHandler(filters.PHOTO | filters.VIDEO | filters.Document.IMAGE, handle_media_input),
                 CallbackQueryHandler(handle_skip, pattern="^skip$"),
             ],
             WAITING_DESCRIPTION: [
