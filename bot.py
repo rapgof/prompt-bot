@@ -145,8 +145,32 @@ async def do_save(update, context, via_callback=False):
     photos      = d.get("photos", [])
     video       = d.get("video", "")
 
-    media_ids = photos + ([video] if video else [])
-    media_str = "\n".join(media_ids) if media_ids else "—"
+    # Get bot instance
+    bot = context.bot
+
+    # Build clickable photo links via Telegram file API
+    token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    media_links = []
+    for file_id in photos:
+        try:
+            file = await bot.get_file(file_id)
+            url = f"https://api.telegram.org/file/bot{token}/{file.file_path}"
+            media_links.append(url)
+        except Exception as e:
+            logger.error(f"Error getting file URL: {e}")
+
+    if media_links:
+        if len(media_links) == 1:
+            media_str = f'=HYPERLINK("{media_links[0]}","📷 Открыть фото")'
+        else:
+            parts = [f'=HYPERLINK("{url}","Фото {i+1}")' for i, url in enumerate(media_links)]
+            media_str = " | ".join(parts)
+    elif video:
+        media_str = video
+    else:
+        media_str = "—"
+
+    media_count = len(photos) + (1 if video else 0)
 
     words = prompt.split()
     title = " ".join(words[:6]) if words and prompt != "—" else "Без названия"
@@ -159,7 +183,7 @@ async def do_save(update, context, via_callback=False):
             "✅ *Сохранено в таблицу!*\n\n"
             f"📌 *Название:* {title}\n"
             f"📝 *Описание:* {description}\n"
-            f"📸 *Медиа:* {'Да (' + str(len(media_ids)) + ' шт.)' if media_ids else 'Нет'}\n"
+            f"📸 *Медиа:* {'Да (' + str(media_count) + ' шт.)' if media_count else 'Нет'}\n"
             f"🔗 *Источник:* {source}\n\n"
             "Отправь следующий промпт! 🚀"
         )
